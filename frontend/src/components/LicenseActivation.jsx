@@ -31,7 +31,7 @@ function LicenseActivation({ onActivated }) {
     // 형식 검증
     if (!validateLicenseFormat(licenseKey)) {
       setStatus('invalid');
-      setMessage('올바른 라이선스 키 형식이 아닙니다. (예: CAPAS-XXXX-XXXX-XXXX)');
+        setMessage('올바른 라이선스 키 형식이 아닙니다. (예: CAPAS-XXXX-XXXX-XXXX-XXXX)');
       return;
     }
 
@@ -152,7 +152,7 @@ function LicenseActivation({ onActivated }) {
                 setMessage('');
               }}
               onKeyPress={handleKeyPress}
-              placeholder="CAPAS-XXXX-XXXX-XXXX"
+              placeholder="CAPAS-XXXX-XXXX-XXXX-XXXX"
               disabled={isLoading}
               className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-mono"
             />

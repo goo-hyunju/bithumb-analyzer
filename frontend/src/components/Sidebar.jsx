@@ -15,7 +15,8 @@ function Sidebar({
   accountBalance, 
   totalProfit, 
   totalLoss, 
-  activeTrades
+  activeTrades,
+  totalAssets = null // 총 자산 정보 (보유 코인 가치 포함)
 }) {
   const [isOpen, setIsOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -30,8 +31,11 @@ function Sidebar({
     { id: 'settings', label: '설정', icon: Settings, path: '/settings' }
   ];
 
-  const profitRate = accountBalance.initial > 0 
-    ? ((accountBalance.current - accountBalance.initial) / accountBalance.initial * 100).toFixed(2)
+  // 총 자산 (보유 코인 가치 포함) 또는 현재 잔액
+  const displayTotalAssets = totalAssets?.totalAssets || accountBalance?.current || 0;
+  
+  const profitRate = accountBalance?.initial > 0 
+    ? ((displayTotalAssets - accountBalance.initial) / accountBalance.initial * 100).toFixed(2)
     : 0;
 
   return (
@@ -82,13 +86,20 @@ function Sidebar({
             <div className="bg-white/80 rounded-lg p-4 border border-blue-200">
               <div className="text-xs text-gray-500 mb-1">총 자산</div>
               <div className="text-2xl font-bold text-gray-800">
-                {accountBalance.current.toLocaleString('ko-KR')}원
+                {displayTotalAssets.toLocaleString('ko-KR')}원
               </div>
               <div className={`text-xs mt-1 ${
                 parseFloat(profitRate) >= 0 ? 'text-green-600' : 'text-red-600'
               }`}>
                 {profitRate >= 0 ? '+' : ''}{profitRate}% ({profitRate >= 0 ? '수익' : '손실'})
               </div>
+              {totalAssets && totalAssets.holdingsValue > 0 && (
+                <div className="text-xs text-gray-400 mt-1">
+                  현금: {totalAssets.cashBalance.toLocaleString('ko-KR')}원
+                  <br />
+                  보유 코인: {totalAssets.holdingsValue.toLocaleString('ko-KR')}원
+                </div>
+              )}
             </div>
 
             {/* 초기 자금 */}
@@ -158,7 +169,7 @@ function Sidebar({
         {/* 푸터 */}
         <div className="p-4 border-t border-gray-200">
           <div className="text-xs text-gray-500 text-center">
-            © 2024 CAPAS
+            © 2025 CAPAS by hyunjugoo
           </div>
         </div>
       </aside>

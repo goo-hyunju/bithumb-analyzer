@@ -6,156 +6,186 @@ function BacktestResults({ backtestResult }) {
   
   if (!backtestResult) return null;
 
-  const ResultCard = ({ title, result, color, iconColor }) => (
-    <div className="bg-white/70 backdrop-blur-xl rounded-2xl p-6 border border-white/50 shadow-xl">
-      <h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-gray-800">
-        <div className={`w-10 h-10 ${color} rounded-xl flex items-center justify-center`}>
-          <Download className={`w-6 h-6 ${iconColor}`} />
-        </div>
-        {title}
-      </h2>
-      
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <div className="bg-white/60 backdrop-blur-lg rounded-xl p-4 border border-white/50 shadow-md">
-          <div className="text-xs text-gray-500 mb-1 font-medium">총 거래</div>
-          <div className="text-2xl font-bold text-gray-800">{result.totalTrades}</div>
-        </div>
-        <div className="bg-white/60 backdrop-blur-lg rounded-xl p-4 border border-white/50 shadow-md">
-          <div className="text-xs text-gray-500 mb-1 font-medium">성공</div>
-          <div className="text-2xl font-bold text-green-600">
-            {result.successfulTrades}
+  const ResultCard = ({ title, result, color, iconColor }) => {
+    // result가 없거나 유효하지 않은 경우 처리
+    if (!result || typeof result !== 'object') {
+      return (
+        <div className="bg-white/70 backdrop-blur-xl rounded-2xl p-6 border border-white/50 shadow-xl">
+          <h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-gray-800">
+            <div className={`w-10 h-10 ${color} rounded-xl flex items-center justify-center`}>
+              <Download className={`w-6 h-6 ${iconColor}`} />
+            </div>
+            {title}
+          </h2>
+          <div className="text-center py-8 text-gray-500">
+            백테스팅 결과가 없습니다. 먼저 백테스팅을 실행해주세요.
           </div>
         </div>
-        <div className="bg-white/60 backdrop-blur-lg rounded-xl p-4 border border-white/50 shadow-md">
-          <div className="text-xs text-gray-500 mb-1 font-medium">성공률</div>
-          <div className={`text-2xl font-bold ${
-            result.successRate >= 60 ? 'text-green-600' : 
-            result.successRate >= 50 ? 'text-yellow-600' : 'text-red-600'
-          }`}>
-            {result.successRate}%
+      );
+    }
+    
+    // 안전한 기본값 설정
+    const safeResult = {
+      totalTrades: result.totalTrades || 0,
+      successfulTrades: result.successfulTrades || 0,
+      successRate: result.successRate || 0,
+      avgProfit: result.avgProfit || 0,
+      totalProfit: result.totalProfit || 0,
+      maxDrawdown: result.maxDrawdown || 0,
+      ...result
+    };
+    
+    return (
+      <div className="bg-white/70 backdrop-blur-xl rounded-2xl p-6 border border-white/50 shadow-xl">
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-gray-800">
+          <div className={`w-10 h-10 ${color} rounded-xl flex items-center justify-center`}>
+            <Download className={`w-6 h-6 ${iconColor}`} />
           </div>
-        </div>
-        <div className="bg-white/60 backdrop-blur-lg rounded-xl p-4 border border-white/50 shadow-md">
-          <div className="text-xs text-gray-500 mb-1 font-medium">평균 수익</div>
-          <div className={`text-2xl font-bold ${
-            result.avgProfit > 0 ? 'text-green-600' : 'text-red-600'
-          }`}>
-            {result.avgProfit}%
+          {title}
+        </h2>
+        
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+          <div className="bg-white/60 backdrop-blur-lg rounded-xl p-4 border border-white/50 shadow-md">
+            <div className="text-xs text-gray-500 mb-1 font-medium">총 거래</div>
+            <div className="text-2xl font-bold text-gray-800">{safeResult.totalTrades}</div>
           </div>
-        </div>
-        <div className="bg-white/60 backdrop-blur-lg rounded-xl p-4 border border-white/50 shadow-md">
-          <div className="text-xs text-gray-500 mb-1 font-medium">총 수익률</div>
-          <div className={`text-2xl font-bold ${
-            result.totalProfit > 0 ? 'text-green-600' : 'text-red-600'
-          }`}>
-            {result.totalProfit}%
+          <div className="bg-white/60 backdrop-blur-lg rounded-xl p-4 border border-white/50 shadow-md">
+            <div className="text-xs text-gray-500 mb-1 font-medium">성공</div>
+            <div className="text-2xl font-bold text-green-600">
+              {safeResult.successfulTrades}
+            </div>
           </div>
-        </div>
-        <div className="bg-white/60 backdrop-blur-lg rounded-xl p-4 border border-white/50 shadow-md">
-          <div className="text-xs text-gray-500 mb-1 font-medium">최대 낙폭</div>
-          <div className="text-2xl font-bold text-red-600">
-            {result.maxDrawdown}%
+          <div className="bg-white/60 backdrop-blur-lg rounded-xl p-4 border border-white/50 shadow-md">
+            <div className="text-xs text-gray-500 mb-1 font-medium">성공률</div>
+            <div className={`text-2xl font-bold ${
+              safeResult.successRate >= 60 ? 'text-green-600' : 
+              safeResult.successRate >= 50 ? 'text-yellow-600' : 'text-red-600'
+            }`}>
+              {safeResult.successRate}%
+            </div>
           </div>
-        </div>
+          <div className="bg-white/60 backdrop-blur-lg rounded-xl p-4 border border-white/50 shadow-md">
+            <div className="text-xs text-gray-500 mb-1 font-medium">평균 수익</div>
+            <div className={`text-2xl font-bold ${
+              safeResult.avgProfit > 0 ? 'text-green-600' : 'text-red-600'
+            }`}>
+              {safeResult.avgProfit}%
+            </div>
+          </div>
+          <div className="bg-white/60 backdrop-blur-lg rounded-xl p-4 border border-white/50 shadow-md">
+            <div className="text-xs text-gray-500 mb-1 font-medium">총 수익률</div>
+            <div className={`text-2xl font-bold ${
+              safeResult.totalProfit > 0 ? 'text-green-600' : 'text-red-600'
+            }`}>
+              {safeResult.totalProfit}%
+            </div>
+          </div>
+          <div className="bg-white/60 backdrop-blur-lg rounded-xl p-4 border border-white/50 shadow-md">
+            <div className="text-xs text-gray-500 mb-1 font-medium">최대 낙폭</div>
+            <div className="text-2xl font-bold text-red-600">
+              {safeResult.maxDrawdown}%
+            </div>
+          </div>
       </div>
 
-      {/* 상세 분석 결과 */}
-      <div className="mt-6 space-y-4">
-        <div className={`p-5 rounded-xl border-2 ${
-          result.successRate >= 60 ? 'bg-green-50 border-green-300' :
-          result.successRate >= 50 ? 'bg-yellow-50 border-yellow-300' :
-          'bg-red-50 border-red-300'
-        }`}>
-          <h3 className="font-bold text-lg mb-3 text-gray-800 flex items-center gap-2">
-            {result.successRate >= 60 ? (
-              <CheckCircle2 className="w-5 h-5 text-green-600" />
-            ) : result.successRate >= 50 ? (
-              <AlertTriangle className="w-5 h-5 text-yellow-600" />
-            ) : (
-              <AlertTriangle className="w-5 h-5 text-red-600" />
-            )}
-            전략 평가 및 투자 권장사항
-          </h3>
-          
-          <div className="grid md:grid-cols-2 gap-4 mb-4">
-            <div className="bg-white/80 rounded-lg p-4 border border-gray-200">
-              <div className="text-xs text-gray-500 mb-1">성공률 평가</div>
-              <div className={`text-lg font-bold ${
-                result.successRate >= 60 ? 'text-green-600' :
-                result.successRate >= 50 ? 'text-yellow-600' : 'text-red-600'
-              }`}>
-                {result.successRate >= 60 ? '✅ 우수' :
-                 result.successRate >= 50 ? '⚠️ 보통' : '❌ 위험'}
+        {/* 상세 분석 결과 */}
+        <div className="mt-6 space-y-4">
+          <div className={`p-5 rounded-xl border-2 ${
+            safeResult.successRate >= 60 ? 'bg-green-50 border-green-300' :
+            safeResult.successRate >= 50 ? 'bg-yellow-50 border-yellow-300' :
+            'bg-red-50 border-red-300'
+          }`}>
+            <h3 className="font-bold text-lg mb-3 text-gray-800 flex items-center gap-2">
+              {safeResult.successRate >= 60 ? (
+                <CheckCircle2 className="w-5 h-5 text-green-600" />
+              ) : safeResult.successRate >= 50 ? (
+                <AlertTriangle className="w-5 h-5 text-yellow-600" />
+              ) : (
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              )}
+              전략 평가 및 투자 권장사항
+            </h3>
+            
+            <div className="grid md:grid-cols-2 gap-4 mb-4">
+              <div className="bg-white/80 rounded-lg p-4 border border-gray-200">
+                <div className="text-xs text-gray-500 mb-1">성공률 평가</div>
+                <div className={`text-lg font-bold ${
+                  safeResult.successRate >= 60 ? 'text-green-600' :
+                  safeResult.successRate >= 50 ? 'text-yellow-600' : 'text-red-600'
+                }`}>
+                  {safeResult.successRate >= 60 ? '✅ 우수' :
+                   safeResult.successRate >= 50 ? '⚠️ 보통' : '❌ 위험'}
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  {safeResult.successRate >= 60 ? 
+                    '이 전략은 과거 데이터 기준으로 높은 성공률을 보였습니다. 투자 고려 대상입니다.' :
+                    safeResult.successRate >= 50 ?
+                    '보통 성공률입니다. 리스크 관리와 분할 투자를 통해 접근하세요.' :
+                    '낮은 성공률입니다. 이 전략으로 투자하기 전에 신중히 검토하세요.'}
+                </p>
               </div>
-              <p className="text-xs text-gray-600 mt-2">
-                {result.successRate >= 60 ? 
-                  '이 전략은 과거 데이터 기준으로 높은 성공률을 보였습니다. 투자 고려 대상입니다.' :
-                  result.successRate >= 50 ?
-                  '보통 성공률입니다. 리스크 관리와 분할 투자를 통해 접근하세요.' :
-                  '낮은 성공률입니다. 이 전략으로 투자하기 전에 신중히 검토하세요.'}
-              </p>
+
+              <div className="bg-white/80 rounded-lg p-4 border border-gray-200">
+                <div className="text-xs text-gray-500 mb-1">기댓값 (Expected Value)</div>
+                <div className={`text-lg font-bold ${
+                  safeResult.avgProfit > 0 ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {safeResult.avgProfit > 0 ? '✅ 수익 가능' : '❌ 손실 위험'}
+                </div>
+                <p className="text-xs text-gray-600 mt-2">
+                  평균 {safeResult.avgProfit}%의 수익률을 기대할 수 있습니다.
+                  {safeResult.avgProfit > 0 
+                    ? ' 양수이므로 장기적으로 수익 가능성이 있습니다.'
+                    : ' 음수이므로 전략을 재검토하거나 투자 금액을 줄이는 것이 좋습니다.'}
+                </p>
+              </div>
             </div>
 
-            <div className="bg-white/80 rounded-lg p-4 border border-gray-200">
-              <div className="text-xs text-gray-500 mb-1">기댓값 (Expected Value)</div>
-              <div className={`text-lg font-bold ${
-                result.avgProfit > 0 ? 'text-green-600' : 'text-red-600'
-              }`}>
-                {result.avgProfit > 0 ? '✅ 수익 가능' : '❌ 손실 위험'}
+            {/* 투자 전략 제안 */}
+            {safeResult.successRate >= 50 && (
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 mt-4">
+                <h4 className="font-semibold mb-2 text-blue-800">💡 투자 전략 제안</h4>
+                <ul className="text-sm text-gray-700 space-y-1">
+                  <li>• 총 자산의 <strong>{Math.min(30, Math.max(10, safeResult.successRate / 2))}%</strong> 이하로 투자</li>
+                  <li>• {title.includes('5%') ? '보수적' : '공격적'} 전략: 목표 수익률 {title.includes('5%') ? '5%' : '10%'}</li>
+                  <li>• 손절선 -2% 반드시 준수</li>
+                  <li>• 최대 낙폭 {Math.abs(safeResult.maxDrawdown)}% 감수 가능한 금액만 투자</li>
+                  {safeResult.totalTrades > 0 && (
+                    <li>• 예상 거래 빈도: 약 {Math.round(200 / safeResult.totalTrades)}일당 1회</li>
+                  )}
+                </ul>
               </div>
-              <p className="text-xs text-gray-600 mt-2">
-                평균 {result.avgProfit}%의 수익률을 기대할 수 있습니다.
-                {result.avgProfit > 0 
-                  ? ' 양수이므로 장기적으로 수익 가능성이 있습니다.'
-                  : ' 음수이므로 전략을 재검토하거나 투자 금액을 줄이는 것이 좋습니다.'}
-              </p>
-            </div>
+            )}
           </div>
 
-          {/* 투자 전략 제안 */}
-          {result.successRate >= 50 && (
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 mt-4">
-              <h4 className="font-semibold mb-2 text-blue-800">💡 투자 전략 제안</h4>
-              <ul className="text-sm text-gray-700 space-y-1">
-                <li>• 총 자산의 <strong>{Math.min(30, Math.max(10, result.successRate / 2))}%</strong> 이하로 투자</li>
-                <li>• {title.includes('5%') ? '보수적' : '공격적'} 전략: 목표 수익률 {title.includes('5%') ? '5%' : '10%'}</li>
-                <li>• 손절선 -2% 반드시 준수</li>
-                <li>• 최대 낙폭 {Math.abs(result.maxDrawdown)}% 감수 가능한 금액만 투자</li>
-                {result.totalTrades > 0 && (
-                  <li>• 예상 거래 빈도: 약 {Math.round(200 / result.totalTrades)}일당 1회</li>
-                )}
-              </ul>
+          {title.includes('5%') && (
+            <div className="p-4 bg-gradient-to-r from-blue-100/50 to-indigo-100/50 rounded-xl border border-blue-300/50">
+              <h3 className="font-bold mb-3 text-blue-800">🔍 사용된 매수 신호 조건 (3단 필터링)</h3>
+              <div className="grid md:grid-cols-2 gap-3">
+                <div className="bg-white/60 rounded-lg p-3 border border-blue-200">
+                  <div className="font-semibold text-sm text-blue-700 mb-1">1차 필터: 골든크로스</div>
+                  <div className="text-xs text-gray-700">MA5가 MA20을 상향 돌파하는 순간</div>
+                </div>
+                <div className="bg-white/60 rounded-lg p-3 border border-blue-200">
+                  <div className="font-semibold text-sm text-blue-700 mb-1">2차 필터: RSI</div>
+                  <div className="text-xs text-gray-700">30~70 구간 (과매도/과매수 구간 제외)</div>
+                </div>
+                <div className="bg-white/60 rounded-lg p-3 border border-blue-200 md:col-span-2">
+                  <div className="font-semibold text-sm text-blue-700 mb-1">3차 필터: 거래량 급증</div>
+                  <div className="text-xs text-gray-700">20일 평균 거래량 대비 150% 이상 증가</div>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-blue-300">
+                <div className="text-xs text-gray-600">
+                  <strong>손절 규칙:</strong> 신호 발생 후 10일 내 목표 수익률 미달성 시 -2% 손절
+                </div>
+              </div>
             </div>
           )}
         </div>
-
-        {title.includes('5%') && (
-          <div className="p-4 bg-gradient-to-r from-blue-100/50 to-indigo-100/50 rounded-xl border border-blue-300/50">
-            <h3 className="font-bold mb-3 text-blue-800">🔍 사용된 매수 신호 조건 (3단 필터링)</h3>
-            <div className="grid md:grid-cols-2 gap-3">
-              <div className="bg-white/60 rounded-lg p-3 border border-blue-200">
-                <div className="font-semibold text-sm text-blue-700 mb-1">1차 필터: 골든크로스</div>
-                <div className="text-xs text-gray-700">MA5가 MA20을 상향 돌파하는 순간</div>
-              </div>
-              <div className="bg-white/60 rounded-lg p-3 border border-blue-200">
-                <div className="font-semibold text-sm text-blue-700 mb-1">2차 필터: RSI</div>
-                <div className="text-xs text-gray-700">30~70 구간 (과매도/과매수 구간 제외)</div>
-              </div>
-              <div className="bg-white/60 rounded-lg p-3 border border-blue-200 md:col-span-2">
-                <div className="font-semibold text-sm text-blue-700 mb-1">3차 필터: 거래량 급증</div>
-                <div className="text-xs text-gray-700">20일 평균 거래량 대비 150% 이상 증가</div>
-              </div>
-            </div>
-            <div className="mt-3 pt-3 border-t border-blue-300">
-              <div className="text-xs text-gray-600">
-                <strong>손절 규칙:</strong> 신호 발생 후 10일 내 목표 수익률 미달성 시 -2% 손절
-              </div>
-            </div>
-          </div>
-        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -251,18 +281,33 @@ function BacktestResults({ backtestResult }) {
         )}
       </div>
 
-      <ResultCard
-        title="5% 목표 수익률 백테스팅"
-        result={backtestResult.result5}
-        color="bg-green-100"
-        iconColor="text-green-600"
-      />
-      <ResultCard
-        title="10% 목표 수익률 백테스팅"
-        result={backtestResult.result10}
-        color="bg-purple-100"
-        iconColor="text-purple-600"
-      />
+      {/* 대시보드 백테스팅 결과 (5% & 10%) */}
+      {backtestResult.result5 && (
+        <ResultCard
+          title="5% 목표 수익률 백테스팅"
+          result={backtestResult.result5}
+          color="bg-green-100"
+          iconColor="text-green-600"
+        />
+      )}
+      {backtestResult.result10 && (
+        <ResultCard
+          title="10% 목표 수익률 백테스팅"
+          result={backtestResult.result10}
+          color="bg-purple-100"
+          iconColor="text-purple-600"
+        />
+      )}
+      
+      {/* 커스텀 백테스팅 결과 */}
+      {backtestResult.custom && (
+        <ResultCard
+          title="커스텀 백테스팅 결과"
+          result={backtestResult.custom}
+          color="bg-blue-100"
+          iconColor="text-blue-600"
+        />
+      )}
     </div>
   );
 }

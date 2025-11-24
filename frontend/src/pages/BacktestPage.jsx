@@ -1,4 +1,5 @@
 import { Info } from 'lucide-react';
+import CoinSelector from '../components/CoinSelector';
 import BacktestRunner from '../components/BacktestRunner';
 import BacktestResults from '../components/BacktestResults';
 
@@ -9,9 +10,20 @@ import BacktestResults from '../components/BacktestResults';
  * - 실제 투자 전 전략 검증
  */
 function BacktestPage({
+  markets,
+  selectedMarket,
+  onMarketChange,
+  candleUnit,
+  onCandleUnitChange,
+  candleMinute,
+  onCandleMinuteChange,
+  candleCount,
+  onAnalyze,
+  loading,
+  serverStatus,
+  onRetryConnection,
   candleData,
   accountBalance,
-  selectedMarket,
   backtestResult,
   onBacktestComplete
 }) {
@@ -79,6 +91,21 @@ function BacktestPage({
           </div>
         </div>
       </div>
+
+      {/* 코인 선택 및 분석 */}
+      <CoinSelector
+        markets={markets}
+        selectedMarket={selectedMarket}
+        onMarketChange={onMarketChange}
+        candleUnit={candleUnit}
+        onCandleUnitChange={onCandleUnitChange}
+        candleMinute={candleMinute}
+        onCandleMinuteChange={onCandleMinuteChange}
+        candleCount={candleCount}
+        onAnalyze={onAnalyze}
+        loading={loading}
+        serverStatus={serverStatus}
+      />
 
       {/* 백테스팅 실행 */}
       <BacktestRunner

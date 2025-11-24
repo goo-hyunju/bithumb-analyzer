@@ -15,6 +15,15 @@ const STORAGE_KEYS = {
  */
 export const saveAccountBalance = (balance) => {
   try {
+    // 데이터 형식 검증
+    if (!balance || typeof balance !== 'object') {
+      console.warn('잘못된 계좌 잔액 형식:', balance);
+      return;
+    }
+    if (typeof balance.initial !== 'number' || typeof balance.current !== 'number') {
+      console.warn('계좌 잔액 숫자 형식 오류:', balance);
+      return;
+    }
     localStorage.setItem(STORAGE_KEYS.ACCOUNT_BALANCE, JSON.stringify(balance));
   } catch (err) {
     console.error('계좌 잔액 저장 실패:', err);
@@ -28,10 +37,20 @@ export const loadAccountBalance = () => {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.ACCOUNT_BALANCE);
     if (data) {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      // 데이터 형식 검증
+      if (parsed && typeof parsed === 'object' && 
+          typeof parsed.initial === 'number' && 
+          typeof parsed.current === 'number') {
+        return parsed;
+      } else {
+        console.warn('잘못된 계좌 잔액 형식, 기본값으로 초기화:', parsed);
+        localStorage.removeItem(STORAGE_KEYS.ACCOUNT_BALANCE);
+      }
     }
   } catch (err) {
     console.error('계좌 잔액 불러오기 실패:', err);
+    localStorage.removeItem(STORAGE_KEYS.ACCOUNT_BALANCE);
   }
   return null;
 };
@@ -41,6 +60,11 @@ export const loadAccountBalance = () => {
  */
 export const saveTradeHistory = (history) => {
   try {
+    // 데이터 형식 검증
+    if (!Array.isArray(history)) {
+      console.warn('잘못된 거래 내역 형식:', history);
+      return;
+    }
     localStorage.setItem(STORAGE_KEYS.TRADE_HISTORY, JSON.stringify(history));
   } catch (err) {
     console.error('거래 내역 저장 실패:', err);
@@ -54,10 +78,18 @@ export const loadTradeHistory = () => {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.TRADE_HISTORY);
     if (data) {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      // 데이터 형식 검증
+      if (Array.isArray(parsed)) {
+        return parsed;
+      } else {
+        console.warn('잘못된 거래 내역 형식, 기본값으로 초기화:', parsed);
+        localStorage.removeItem(STORAGE_KEYS.TRADE_HISTORY);
+      }
     }
   } catch (err) {
     console.error('거래 내역 불러오기 실패:', err);
+    localStorage.removeItem(STORAGE_KEYS.TRADE_HISTORY);
   }
   return [];
 };

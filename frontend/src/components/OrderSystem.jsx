@@ -8,13 +8,15 @@ import {
   Clock,
   DollarSign
 } from 'lucide-react';
+import { calculateHoldings } from '../utils/accountUtils';
 
 function OrderSystem({ 
   selectedMarket, 
   currentPrice, 
   accountBalance, 
   onBalanceChange,
-  onOrderFilled 
+  onOrderFilled,
+  tradeHistory = [] // 거래 내역을 받아서 매도 시 매수가 찾기
 }) {
   const [orderType, setOrderType] = useState('buy'); // 'buy' or 'sell'
   const [orderAmount, setOrderAmount] = useState(0);
@@ -87,13 +89,14 @@ function OrderSystem({
     // 체결 내역에 추가
     setFilledOrders(prev => [...prev, filledOrder]);
     
-    // 거래 내역 콜백 (토스트는 TradingPage에서 처리)
+    // 거래 내역 콜백 (매수는 아직 수익 없음 - profit: 0)
     if (onOrderFilled) {
-      const profit = orderAmount * (currentMarketPrice - orderPrice);
       onOrderFilled({
         ...filledOrder,
-        profit: profit,
-        profitPercent: orderPrice > 0 ? ((currentMarketPrice - orderPrice) / orderPrice * 100).toFixed(2) : '0'
+        entryPrice: currentMarketPrice, // 매수가 저장
+        exitPrice: 0, // 매도 전이므로 0
+        profit: 0, // 매수는 아직 수익 없음
+        profitPercent: 0
       });
     }
   };
@@ -105,7 +108,17 @@ function OrderSystem({
       return;
     }
 
-    // 보유량 확인 (실제로는 보유 코인 정보가 필요)
+    // 보유 코인 정보 계산 (평균 매수가 찾기)
+    const holdings = calculateHoldings(tradeHistory);
+    const holding = holdings[marketName];
+    
+    if (!holding || holding.amount < orderAmount) {
+      alert('보유 수량이 부족합니다.');
+      return;
+    }
+
+    const avgEntryPrice = holding.avgPrice; // 평균 매수가
+
     const newOrder = {
       id: Date.now(),
       type: 'sell',
@@ -118,17 +131,23 @@ function OrderSystem({
       status: 'pending'
     };
 
-    // 매도는 즉시 체결 (보유 코인 확인 필요하지만 시뮬레이션)
+    // 매도는 즉시 체결
     const sellAmount = orderAmount * currentMarketPrice;
-    const profit = orderAmount * (currentMarketPrice - orderPrice);
+    // 평균 매수가 기준으로 수익 계산
+    const profit = orderAmount * (currentMarketPrice - avgEntryPrice);
+    const profitPercent = avgEntryPrice > 0 
+      ? ((currentMarketPrice - avgEntryPrice) / avgEntryPrice * 100).toFixed(2)
+      : '0';
 
     const filledOrder = {
       ...newOrder,
       status: 'filled',
       filledPrice: currentMarketPrice,
       filledAt: new Date(),
+      entryPrice: avgEntryPrice, // 평균 매수가 저장
+      exitPrice: currentMarketPrice,
       profit: profit,
-      profitPercent: orderPrice > 0 ? ((currentMarketPrice - orderPrice) / orderPrice * 100).toFixed(2) : '0'
+      profitPercent: parseFloat(profitPercent)
     };
 
     // 현금 증가
@@ -140,7 +159,7 @@ function OrderSystem({
     // 체결 내역에 추가
     setFilledOrders(prev => [...prev, filledOrder]);
 
-    // 거래 내역 콜백
+    // 거래 내역 콜백 (실현 수익/손실 반영)
     if (onOrderFilled) {
       onOrderFilled(filledOrder);
     }
@@ -162,11 +181,25 @@ function OrderSystem({
     setPendingOrders(pendingOrders.filter(o => o.id !== orderId));
   };
 
-  // 주문 사용 금액 자동 설정 (10%, 25%, 50%, 100%)
-  const setOrderPercentage = (percentage) => {
+  // 매수용: 주문 사용 금액 자동 설정 (10%, 25%, 50%, 100%)
+  const setBuyOrderPercentage = (percentage) => {
     const amount = (availableBalance * percentage / 100);
     const coinAmount = amount / currentMarketPrice;
     setOrderAmount(Math.floor(coinAmount * 100) / 100);
+    setOrderPrice(currentMarketPrice);
+  };
+
+  // 매도용: 보유 코인 수량 기준 빠른 설정
+  const setSellOrderPercentage = (percentage) => {
+    // 거래 내역에서 같은 코인의 매수 기록으로 보유량 계산
+    const buyTrades = tradeHistory.filter(t => 
+      t && t.type === 'buy' && 
+      (t.market === selectedMarket || t.coin === marketName)
+    );
+    const totalHeld = buyTrades.reduce((sum, t) => sum + (t.amount || 0), 0);
+    
+    const sellAmount = (totalHeld * percentage / 100);
+    setOrderAmount(Math.floor(sellAmount * 100) / 100);
     setOrderPrice(currentMarketPrice);
   };
 
@@ -251,25 +284,38 @@ function OrderSystem({
             </div>
           </div>
 
-          {/* 빠른 설정 버튼 (매수만) */}
-          {orderType === 'buy' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                빠른 설정
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {[10, 25, 50, 100].map(percent => (
-                  <button
-                    key={percent}
-                    onClick={() => setOrderPercentage(percent / 100)}
-                    className="px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-medium transition-all"
-                  >
-                    {percent}%
-                  </button>
-                ))}
-              </div>
+          {/* 빠른 설정 버튼 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              빠른 설정
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {[10, 25, 50, 100].map(percent => (
+                <button
+                  key={percent}
+                  onClick={() => {
+                    if (orderType === 'buy') {
+                      setBuyOrderPercentage(percent);
+                    } else {
+                      setSellOrderPercentage(percent);
+                    }
+                  }}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    orderType === 'buy'
+                      ? 'bg-blue-100 hover:bg-blue-200 text-blue-700'
+                      : 'bg-red-100 hover:bg-red-200 text-red-700'
+                  }`}
+                >
+                  {percent}%
+                </button>
+              ))}
             </div>
-          )}
+            {orderType === 'sell' && (
+              <div className="text-xs text-gray-500 mt-1">
+                보유 코인 수량 기준
+              </div>
+            )}
+          </div>
 
           {/* 총 주문 금액 */}
           <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">

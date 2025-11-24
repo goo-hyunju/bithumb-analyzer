@@ -6,13 +6,13 @@ const LICENSE_STORAGE_KEY = 'capas_license';
 
 /**
  * 라이선스 키 형식 검증
- * 형식: CAPAS-XXXX-XXXX-XXXX (대문자)
+ * 형식: CAPAS-XXXX-XXXX-XXXX-XXXX (대문자, 4개 세그먼트)
  */
 export const validateLicenseFormat = (key) => {
   if (!key || typeof key !== 'string') return false;
   
   const formatted = key.trim().toUpperCase();
-  const pattern = /^CAPAS-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+  const pattern = /^CAPAS-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
   
   return pattern.test(formatted);
 };

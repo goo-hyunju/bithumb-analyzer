@@ -10,7 +10,9 @@ function AccountPage({
   accountBalance,
   onBalanceChange,
   tradeHistory,
-  onTradeHistoryUpdate
+  onTradeHistoryUpdate,
+  coinPrices = {},
+  serverStatus = 'disconnected'
 }) {
   return (
     <AccountManager
@@ -18,6 +20,8 @@ function AccountPage({
       onBalanceChange={onBalanceChange}
       tradeHistory={tradeHistory}
       onTradeUpdate={onTradeHistoryUpdate}
+      coinPrices={coinPrices}
+      serverStatus={serverStatus}
     />
   );
 }

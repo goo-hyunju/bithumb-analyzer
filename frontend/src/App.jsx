@@ -16,7 +16,8 @@ import LicensePage from './pages/LicensePage';
 import { checkServerStatus, fetchMarkets, fetchCandles, fetchCurrentPrice, fetchIndicators, fetchBacktest } from './utils/apiUtils';
 import { getDefaultChartRange, getCandleTypeLabel } from './utils/chartUtils';
 import { useRealTimeUpdate } from './hooks/useRealTimeUpdate';
-import { enhanceBacktestResult, createTradeHistory } from './utils/accountUtils';
+import { useHoldingsPriceUpdate } from './hooks/useHoldingsPriceUpdate';
+import { enhanceBacktestResult, createTradeHistory, normalizeTradeRecord, calculateTotalAssets, calculateHoldings } from './utils/accountUtils';
 import { 
   saveAccountBalance, 
   loadAccountBalance, 
@@ -53,15 +54,19 @@ function App() {
   
   const [tradeHistory, setTradeHistory] = useState(() => loadTradeHistory());
   const [activeTrades, setActiveTrades] = useState(0);
+  const [coinPrices, setCoinPrices] = useState({}); // 코인별 현재가 저장
   
-  // 수익/손실 계산
+  // 수익/손실 계산 (실제 체결된 거래만)
   const totalProfit = tradeHistory
-    .filter(t => t.profit > 0)
+    .filter(t => t && typeof t.profit === 'number' && t.profit > 0)
     .reduce((sum, t) => sum + t.profit, 0);
   
   const totalLoss = Math.abs(tradeHistory
-    .filter(t => t.profit < 0)
+    .filter(t => t && typeof t.profit === 'number' && t.profit < 0)
     .reduce((sum, t) => sum + t.profit, 0));
+  
+  // 총 자산 계산 (현재 잔액 + 보유 코인 가치)
+  const totalAssets = calculateTotalAssets(accountBalance, tradeHistory, coinPrices);
 
   // 서버 연결 확인
   useEffect(() => {
@@ -75,15 +80,28 @@ function App() {
     checkServer();
   }, []);
 
-  // 계좌 잔액 변경 시 저장
+  // 계좌 잔액 변경 시 저장 (값이 실제로 변경된 경우에만)
   useEffect(() => {
-    saveAccountBalance(accountBalance);
-  }, [accountBalance]);
+    if (accountBalance && typeof accountBalance.initial === 'number' && typeof accountBalance.current === 'number') {
+      saveAccountBalance(accountBalance);
+    }
+  }, [accountBalance?.initial, accountBalance?.current]);
 
   // 거래 내역 변경 시 저장
   useEffect(() => {
-    saveTradeHistory(tradeHistory);
+    if (Array.isArray(tradeHistory)) {
+      saveTradeHistory(tradeHistory);
+    }
   }, [tradeHistory]);
+  
+  // 보유 코인 현재가 실시간 업데이트 (30초마다)
+  useHoldingsPriceUpdate({
+    tradeHistory,
+    accountBalance,
+    serverStatus,
+    coinPrices,
+    setCoinPrices
+  });
 
   // 선택된 코인 변경 시 저장
   useEffect(() => {
@@ -114,8 +132,8 @@ function App() {
     }
   };
 
-  // 전체 분석 실행
-  const runFullAnalysis = async () => {
+  // 전체 분석 실행 (대시보드용 - 백테스팅 포함)
+  const runFullAnalysis = async (includeBacktest = true) => {
     setLoading(true);
     setError(null);
     
@@ -133,36 +151,37 @@ function App() {
       const price = await fetchCurrentPrice(selectedMarket);
       setCurrentPrice(price);
       
+      // 코인별 현재가 저장 (총 자산 계산용)
+      const coinName = selectedMarket.replace('KRW-', '');
+      setCoinPrices(prev => ({
+        ...prev,
+        [coinName]: price,
+        [selectedMarket]: price
+      }));
+      
       // 3. 지표 계산
       const indicatorData = await fetchIndicators(candles);
       setIndicators(indicatorData);
       
-      // 4. 백테스팅 (5% & 10%)
-      const [backtest5, backtest10] = await Promise.all([
-        fetchBacktest(candles, 5),
-        fetchBacktest(candles, 10)
-      ]);
-      
-      // 금액 정보 추가
-      const enhancedResult5 = enhanceBacktestResult(backtest5, accountBalance);
-      const enhancedResult10 = enhanceBacktestResult(backtest10, accountBalance);
-      
-      setBacktestResult({
-        result5: enhancedResult5,
-        result10: enhancedResult10
-      });
-
-      // 거래 내역 업데이트 (5% 결과 기준)
-      const history = createTradeHistory(backtest5, selectedMarket);
-      setTradeHistory(history);
-      
-      // 계좌 잔액 업데이트
-      if (enhancedResult5?.realAmount) {
-        setAccountBalance(prev => ({
-          ...prev,
-          current: prev.initial + enhancedResult5.realAmount.netProfit
-        }));
+      // 4. 백테스팅 (대시보드에서만 자동 실행)
+      if (includeBacktest) {
+        const [backtest5, backtest10] = await Promise.all([
+          fetchBacktest(candles, 5),
+          fetchBacktest(candles, 10)
+        ]);
+        
+        // 금액 정보 추가
+        const enhancedResult5 = enhanceBacktestResult(backtest5, accountBalance);
+        const enhancedResult10 = enhanceBacktestResult(backtest10, accountBalance);
+        
+        setBacktestResult({
+          result5: enhancedResult5,
+          result10: enhancedResult10
+        });
       }
+
+      // 백테스팅 결과는 거래 내역에 자동 추가하지 않음
+      // 거래 내역은 모의투자 페이지에서만 사용자가 직접 매수/매도할 때 추가됨
       
     } catch (err) {
       setError('분석 실패: ' + err.message);
@@ -170,6 +189,11 @@ function App() {
     } finally {
       setLoading(false);
     }
+  };
+  
+  // 백테스팅 페이지용 분석 실행 (백테스팅 제외)
+  const runAnalysisWithoutBacktest = async () => {
+    return runFullAnalysis(false);
   };
 
   // 캔들 타입 변경 핸들러
@@ -195,7 +219,23 @@ function App() {
 
   // 거래 내역 업데이트 핸들러
   const handleTradeHistoryUpdate = (trade) => {
-    setTradeHistory(prev => [...prev, trade]);
+    const normalizedTrade = normalizeTradeRecord(trade);
+    
+    if (normalizedTrade) {
+      setTradeHistory(prev => {
+        // 중복 체크: 같은 ID가 이미 있으면 업데이트, 없으면 추가
+        const existingIndex = prev.findIndex(t => t.id === normalizedTrade.id);
+        if (existingIndex >= 0) {
+          // 기존 거래 업데이트
+          const updated = [...prev];
+          updated[existingIndex] = normalizedTrade;
+          return updated;
+        } else {
+          // 새 거래 추가
+          return [...prev, normalizedTrade];
+        }
+      });
+    }
     // 계좌 잔액은 OrderSystem에서 직접 업데이트됨
   };
 
@@ -209,7 +249,7 @@ function App() {
     candleMinute,
     onCandleMinuteChange: setCandleMinute,
     candleCount,
-    onAnalyze: runFullAnalysis,
+    onAnalyze: runFullAnalysis, // 대시보드용 (백테스팅 포함)
     loading,
     serverStatus,
     onRetryConnection: handleRetryConnection,
@@ -219,6 +259,12 @@ function App() {
     candleData,
     isRealTime,
     onRealTimeToggle: () => setIsRealTime(!isRealTime)
+  };
+  
+  // 백테스팅 페이지용 props (백테스팅 제외)
+  const backtestPageProps = {
+    ...commonProps,
+    onAnalyze: runAnalysisWithoutBacktest // 백테스팅 페이지용 (백테스팅 제외)
   };
 
   return (
@@ -236,6 +282,7 @@ function App() {
         totalProfit={totalProfit}
         totalLoss={totalLoss}
         activeTrades={activeTrades}
+        totalAssets={totalAssets}
       />
 
       {/* 메인 컨텐츠 */}
@@ -253,32 +300,35 @@ function App() {
               element={
                 <TradingPage
                   {...commonProps}
-                  onCurrentPriceChange={setCurrentPrice}
+                  onCurrentPriceChange={(price) => {
+                    setCurrentPrice(price);
+                    // 코인별 현재가 저장 (총 자산 계산용)
+                    const coinName = selectedMarket.replace('KRW-', '');
+                    setCoinPrices(prev => ({
+                      ...prev,
+                      [coinName]: price,
+                      [selectedMarket]: price
+                    }));
+                  }}
                   accountBalance={accountBalance}
                   onBalanceChange={setAccountBalance}
                   onTradeHistoryUpdate={handleTradeHistoryUpdate}
+                  tradeHistory={tradeHistory}
                 />
               } 
             />
             <Route 
-              path="/backtest" 
+              path="/backtest"
               element={
                 <BacktestPage
-                  candleData={candleData}
+                  {...backtestPageProps}
                   accountBalance={accountBalance}
-                  selectedMarket={selectedMarket}
                   backtestResult={backtestResult}
                   onBacktestComplete={(result) => {
                     const enhanced = enhanceBacktestResult(result, accountBalance);
                     setBacktestResult({ custom: enhanced });
-                    const history = createTradeHistory(result, selectedMarket);
-                    setTradeHistory(history);
-                    if (enhanced?.realAmount) {
-                      setAccountBalance(prev => ({
-                        ...prev,
-                        current: prev.initial + enhanced.realAmount.netProfit
-                      }));
-                    }
+                    // 백테스팅 결과는 거래 내역에 자동 추가하지 않음
+                    // 거래 내역은 모의투자 페이지에서만 사용자가 직접 매수/매도할 때 추가됨
                   }}
                 />
               } 
@@ -290,7 +340,9 @@ function App() {
                   accountBalance={accountBalance}
                   onBalanceChange={setAccountBalance}
                   tradeHistory={tradeHistory}
-                  onTradeHistoryUpdate={setTradeHistory}
+                  onTradeHistoryUpdate={handleTradeHistoryUpdate}
+                  coinPrices={coinPrices}
+                  serverStatus={serverStatus}
                 />
               } 
             />

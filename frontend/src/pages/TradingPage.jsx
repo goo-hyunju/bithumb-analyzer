@@ -22,6 +22,7 @@ function TradingPage({
   accountBalance,
   onBalanceChange,
   onTradeHistoryUpdate,
+  tradeHistory = [], // 거래 내역 추가
   candleData,
   candleUnit,
   onCandleUnitChange,
@@ -155,6 +156,7 @@ function TradingPage({
         accountBalance={accountBalance}
         onBalanceChange={onBalanceChange}
         onOrderFilled={handleOrderFilled}
+        tradeHistory={tradeHistory}
       />
 
       {/* 수익 요약 */}
