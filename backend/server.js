@@ -4,8 +4,33 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 
+// Supabase는 선택적 (패키지가 없어도 서버가 시작되도록)
+let supabase = null;
+let supabaseAvailable = false;
+try {
+  const supabaseModule = require('./utils/supabaseClient');
+  supabase = supabaseModule.supabase;
+  supabaseAvailable = supabaseModule.supabaseAvailable;
+} catch (err) {
+  console.warn('⚠️  Supabase 클라이언트 로드 실패 (라이선스 검증 기능 비활성화):', err.message);
+}
+
+// 환경 변수 또는 config 파일에서 포트 가져오기
+require('dotenv').config();
+let PORT = process.env.PORT;
+
+if (!PORT) {
+  try {
+    const config = require('./config.js');
+    PORT = config?.port;
+  } catch (err) {
+    // config.js 파일이 없으면 무시
+  }
+}
+
+PORT = PORT || 5000;
+
 const app = express();
-const PORT = process.env.PORT || 5000;
 
 // CORS 설정 - 프론트엔드에서 접근 가능하도록
 app.use(cors());
@@ -94,6 +119,61 @@ app.get('/api/candles/:market', async (req, res) => {
   } catch (error) {
     console.error('캔들 데이터 조회 실패:', error.message);
     res.status(500).json({ error: '캔들 데이터 조회 실패: ' + error.message });
+  }
+});
+
+// ============================================
+// 3-1. 최신 캔들 데이터 조회 (실시간 업데이트용)
+// ============================================
+app.get('/api/candles/:market/latest', async (req, res) => {
+  try {
+    await delay(100);
+    
+    const { unit = 'days', minute = null, after = null } = req.query;
+    
+    // 캔들 타입별 API 엔드포인트 결정
+    let endpoint;
+    if (unit === 'minutes') {
+      const validMinutes = [1, 3, 5, 15, 30, 60];
+      const minuteValue = minute ? parseInt(minute) : 1;
+      if (!validMinutes.includes(minuteValue)) {
+        return res.status(400).json({ error: '지원하지 않는 분봉 단위입니다.' });
+      }
+      endpoint = `${BITHUMB_API}/candles/minutes/${minuteValue}`;
+    } else if (unit === 'days') {
+      endpoint = `${BITHUMB_API}/candles/days`;
+    } else if (unit === 'weeks') {
+      endpoint = `${BITHUMB_API}/candles/weeks`;
+    } else {
+      return res.status(400).json({ error: '지원하지 않는 캔들 타입입니다.' });
+    }
+    
+    // 최신 데이터만 가져오기 (최근 5개)
+    const response = await axios.get(endpoint, {
+      params: {
+        market: req.params.market,
+        count: 5
+      }
+    });
+    
+    // 시간순 정렬 (오래된 것부터)
+    const sorted = response.data.reverse();
+    
+    // after 파라미터가 있으면 해당 시간 이후의 데이터만 필터링
+    let filtered = sorted;
+    if (after) {
+      const afterTime = new Date(after);
+      filtered = sorted.filter(candle => {
+        const candleTime = new Date(candle.candle_date_time_kst || candle.candle_date_time_utc);
+        return candleTime > afterTime;
+      });
+    }
+    
+    console.log(`✓ 최신 캔들 데이터 조회: ${req.params.market} (${filtered.length}개 신규)`);
+    res.json(filtered);
+  } catch (error) {
+    console.error('최신 캔들 데이터 조회 실패:', error.message);
+    res.status(500).json({ error: '최신 캔들 데이터 조회 실패: ' + error.message });
   }
 });
 
@@ -192,11 +272,22 @@ app.post('/api/indicators', async (req, res) => {
 // ============================================
 app.post('/api/backtest', async (req, res) => {
   try {
-    const { candles, targetProfit = 5 } = req.body;
+    const { 
+      candles, 
+      targetProfit = 5,
+      options = {} 
+    } = req.body;
     
     if (!candles || !Array.isArray(candles)) {
       return res.status(400).json({ error: '캔들 데이터가 필요합니다' });
     }
+    
+    // 커스텀 파라미터 (옵션에서 추출)
+    const stopLoss = options.stopLoss || -2;
+    const holdingPeriod = options.holdingPeriod || 10;
+    const rsiMin = options.rsiMin || 30;
+    const rsiMax = options.rsiMax || 70;
+    const volumeThreshold = options.volumeThreshold || 150;
     
     const prices = candles.map(c => c.trade_price);
     const volumes = candles.map(c => c.candle_acc_trade_volume);
@@ -208,9 +299,17 @@ app.post('/api/backtest', async (req, res) => {
     let maxDrawdown = 0;
     let currentDrawdown = 0;
     
-    console.log(`백테스팅 시작: ${targetProfit}% 목표`);
+    console.log(`백테스팅 시작: ${targetProfit}% 목표, 손절 ${stopLoss}%, 보유 ${holdingPeriod}일, RSI ${rsiMin}-${rsiMax}, 거래량 ${volumeThreshold}%`);
     
-    for (let i = 60; i < candles.length - 10; i++) {
+    // 최소 데이터 검증
+    const minRequired = Math.max(60, holdingPeriod + 10);
+    if (candles.length < minRequired) {
+      return res.status(400).json({ 
+        error: `최소 ${minRequired}개의 캔들 데이터가 필요합니다. (현재: ${candles.length}개)` 
+      });
+    }
+    
+    for (let i = 60; i < candles.length - holdingPeriod; i++) {
       const currentPrices = prices.slice(0, i + 1);
       const currentVolumes = volumes.slice(0, i + 1);
       
@@ -218,6 +317,8 @@ app.post('/api/backtest', async (req, res) => {
       const ma5 = calculateMA(currentPrices, 5);
       const ma20 = calculateMA(currentPrices, 20);
       const rsi = calculateRSI(currentPrices, 14);
+      
+      if (ma5.length < 2 || ma20.length < 2 || rsi.length < 1) continue;
       
       const currentMA5 = ma5[ma5.length - 1];
       const currentMA20 = ma20[ma20.length - 1];
@@ -227,28 +328,29 @@ app.post('/api/backtest', async (req, res) => {
       
       // 거래량 분석
       const recentVolumes = currentVolumes.slice(-20);
-      const avgVolume = recentVolumes.reduce((a, b) => a + b, 0) / 20;
-      const volumeSpike = currentVolumes[currentVolumes.length - 1] > avgVolume * 1.5;
+      const avgVolume = recentVolumes.reduce((a, b) => a + b, 0) / Math.min(20, recentVolumes.length);
+      const volumeSpike = currentVolumes[currentVolumes.length - 1] > avgVolume * (volumeThreshold / 100);
       
-      // 매수 신호: 골든크로스 + RSI 적정 + 거래량 급증
+      // 매수 신호: 골든크로스 + RSI 커스텀 범위 + 거래량 급증
       const buySignal = 
         prevMA5 <= prevMA20 && 
         currentMA5 > currentMA20 && 
-        currentRSI > 30 && 
-        currentRSI < 70 &&
+        currentRSI > rsiMin && 
+        currentRSI < rsiMax &&
         volumeSpike;
       
       if (buySignal) {
         const entryPrice = currentPrices[currentPrices.length - 1];
         const target = entryPrice * (1 + targetProfit / 100);
+        const stopLossPrice = entryPrice * (1 + stopLoss / 100);
         
-        // 향후 10일간 목표가 달성 여부 확인
+        // 향후 보유 기간 동안 목표가 달성 여부 확인
         let reached = false;
         let daysToTarget = null;
         let exitPrice = entryPrice;
-        let profit = -2; // 기본 손절
+        let profit = stopLoss; // 기본 손절
         
-        for (let j = 1; j <= 10 && i + j < candles.length; j++) {
+        for (let j = 1; j <= holdingPeriod && i + j < candles.length; j++) {
           const futureHigh = candles[i + j].high_price;
           const futureLow = candles[i + j].low_price;
           
@@ -261,10 +363,10 @@ app.post('/api/backtest', async (req, res) => {
             break;
           }
           
-          // 손절 (-2%)
-          if (futureLow <= entryPrice * 0.98) {
-            exitPrice = entryPrice * 0.98;
-            profit = -2;
+          // 손절
+          if (futureLow <= stopLossPrice) {
+            exitPrice = stopLossPrice;
+            profit = stopLoss;
             break;
           }
         }
@@ -277,9 +379,10 @@ app.post('/api/backtest', async (req, res) => {
         maxDrawdown = Math.min(maxDrawdown, currentDrawdown);
         
         trades.push({
-          date: candles[i].candle_date_time_kst.split('T')[0],
+          date: candles[i].candle_date_time_kst?.split('T')[0] || candles[i].candle_date_time_utc?.split('T')[0] || '',
           entryPrice,
           target,
+          stopLossPrice,
           reached,
           daysToTarget,
           profit,
@@ -320,6 +423,129 @@ app.get('/health', (req, res) => {
 // ============================================
 // 서버 시작
 // ============================================
+// 7. 라이선스 키 검증 (크몽 판매용)
+// ============================================
+// Supabase를 사용하여 라이선스 키를 관리합니다
+
+app.post('/api/license/validate', async (req, res) => {
+  try {
+    const { licenseKey } = req.body;
+
+    if (!licenseKey || typeof licenseKey !== 'string') {
+      return res.status(400).json({
+        valid: false,
+        message: '라이선스 키가 제공되지 않았습니다.'
+      });
+    }
+
+    // 키 형식 정규화 (대문자, 공백 제거)
+    const normalizedKey = licenseKey.trim().toUpperCase();
+
+    // 형식 검증 (4개 세그먼트: CAPAS-XXXX-XXXX-XXXX-XXXX)
+    const keyPattern = /^CAPAS-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+    if (!keyPattern.test(normalizedKey)) {
+      return res.status(400).json({
+        valid: false,
+        message: '올바른 라이선스 키 형식이 아닙니다. (예: CAPAS-XXXX-XXXX-XXXX-XXXX)'
+      });
+    }
+
+    // 개발용: DEMO 키는 항상 유효 (테스트용)
+    if (normalizedKey.startsWith('CAPAS-DEMO-')) {
+      console.log(`✓ 라이선스 검증 성공 (DEMO): ${normalizedKey}`);
+      return res.json({
+        valid: true,
+        message: '라이선스가 성공적으로 활성화되었습니다. (DEMO 모드)',
+        expiresAt: null
+      });
+    }
+
+    // Supabase에서 라이선스 키 검증
+    if (!supabaseAvailable || !supabase) {
+      console.log(`⚠️  Supabase가 설정되지 않아 라이선스 검증을 건너뜁니다: ${normalizedKey}`);
+      return res.status(503).json({
+        valid: false,
+        message: '라이선스 검증 서비스가 일시적으로 사용할 수 없습니다. 나중에 다시 시도해주세요.'
+      });
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('licenses')
+        .select('*')
+        .eq('license_key', normalizedKey)
+        .eq('is_active', true)
+        .single();
+
+      if (error) {
+        // 키가 없는 경우 또는 다른 에러
+        if (error.code === 'PGRST116') {
+          // 키를 찾을 수 없음
+          console.log(`✗ 라이선스 검증 실패: ${normalizedKey} (키를 찾을 수 없음)`);
+          return res.status(403).json({
+            valid: false,
+            message: '유효하지 않은 라이선스 키입니다. 크몽에서 구매하신 정확한 키를 입력해주세요.'
+          });
+        } else {
+          // 다른 에러
+          console.error('Supabase 라이선스 검증 오류:', error);
+          return res.status(500).json({
+            valid: false,
+            message: '라이선스 검증 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+          });
+        }
+      }
+
+      if (data && data.is_active) {
+        // 만료일 확인
+        if (data.expires_at) {
+          const expiresAt = new Date(data.expires_at);
+          const now = new Date();
+          if (now > expiresAt) {
+            console.log(`✗ 라이선스 만료: ${normalizedKey}`);
+            return res.status(403).json({
+              valid: false,
+              message: '라이선스가 만료되었습니다. 크몽을 통해 문의해주세요.'
+            });
+          }
+        }
+
+        // 활성화 시간 업데이트 (선택사항)
+        await supabase
+          .from('licenses')
+          .update({ activated_at: new Date().toISOString() })
+          .eq('license_key', normalizedKey);
+
+        console.log(`✓ 라이선스 검증 성공: ${normalizedKey}`);
+        return res.json({
+          valid: true,
+          message: '라이선스가 성공적으로 활성화되었습니다.',
+          expiresAt: data.expires_at || null
+        });
+      } else {
+        console.log(`✗ 라이선스 비활성화됨: ${normalizedKey}`);
+        return res.status(403).json({
+          valid: false,
+          message: '비활성화된 라이선스 키입니다. 크몽을 통해 문의해주세요.'
+        });
+      }
+    } catch (dbError) {
+      console.error('라이선스 검증 중 예외 발생:', dbError);
+      return res.status(500).json({
+        valid: false,
+        message: '라이선스 검증 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+      });
+    }
+  } catch (error) {
+    console.error('라이선스 검증 오류:', error.message);
+    return res.status(500).json({
+      valid: false,
+      message: '라이선스 검증 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+    });
+  }
+});
+
+// ============================================
 app.listen(PORT, () => {
   console.log('\n' + '='.repeat(60));
   console.log('🚀 CAPAS 백엔드 서버 실행 중');
@@ -333,5 +559,6 @@ app.listen(PORT, () => {
   console.log('  POST /api/indicators        - 기술적 지표 계산');
   console.log('  POST /api/backtest          - 백테스팅 실행');
   console.log('  GET  /health                - 헬스체크');
+  console.log('  POST /api/license/validate  - 라이선스 키 검증');
   console.log('='.repeat(60) + '\n');
 });

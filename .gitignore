@@ -26,6 +26,21 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# 환경 변수 파일 (중요한 정보 포함)
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.local
+frontend/.env
+frontend/.env.local
+
+# 설정 파일 (민감한 정보 포함)
+config.js
+config.local.js
+backend/config.js
+backend/config.local.js
 *.sublime-project
 *.sublime-workspace
 
@@ -43,4 +58,13 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# 내부 가이드 문서 (사용자에게 공개하면 안 되는 파일)
+SUPABASE_SETUP.md
+SUPABASE_NEXT_STEPS.md
+SETUP_ENV.md
+KMONG_GUIDE.md
+LICENSE_MODEL.md
+ARCHITECTURE.md
+LICENSE_EXPLAINED.md
 

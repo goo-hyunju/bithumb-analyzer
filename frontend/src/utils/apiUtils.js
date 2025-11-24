@@ -42,6 +42,22 @@ export const fetchCandles = async (market, count, unit, minute = null) => {
 };
 
 /**
+ * 최신 캔들 데이터 조회 (실시간 업데이트용)
+ */
+export const fetchLatestCandles = async (market, unit, minute = null, after = null) => {
+  let url = `${API_URL}/candles/${market}/latest?unit=${unit}`;
+  if (unit === 'minutes' && minute) {
+    url += `&minute=${minute}`;
+  }
+  if (after) {
+    url += `&after=${after}`;
+  }
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('최신 캔들 데이터 조회 실패');
+  return response.json();
+};
+
+/**
  * 기술적 지표 계산
  */
 export const fetchIndicators = async (candles) => {
@@ -57,13 +73,16 @@ export const fetchIndicators = async (candles) => {
 /**
  * 백테스팅 실행
  */
-export const fetchBacktest = async (candles, targetProfit) => {
+export const fetchBacktest = async (candles, targetProfit = 5, options = {}) => {
   const response = await fetch(`${API_URL}/backtest`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ candles, targetProfit })
+    body: JSON.stringify({ candles, targetProfit, options })
   });
-  if (!response.ok) throw new Error('백테스팅 실패');
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || '백테스팅 실패');
+  }
   return response.json();
 };
 

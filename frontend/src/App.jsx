@@ -1,23 +1,35 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 // Components
-import Header from './components/Header';
-import ServerWarning from './components/ServerWarning';
-import CoinSelector from './components/CoinSelector';
-import PriceCards from './components/PriceCards';
-import TechnicalIndicators from './components/TechnicalIndicators';
-import PriceChart from './components/PriceChart';
-import BacktestResults from './components/BacktestResults';
+import Sidebar from './components/Sidebar';
+
+// Pages
+import DashboardPage from './pages/DashboardPage';
+import TradingPage from './pages/TradingPage';
+import BacktestPage from './pages/BacktestPage';
+import AccountPage from './pages/AccountPage';
+import SettingsPage from './pages/SettingsPage';
+import LicensePage from './pages/LicensePage';
 
 // Utils & Hooks
 import { checkServerStatus, fetchMarkets, fetchCandles, fetchCurrentPrice, fetchIndicators, fetchBacktest } from './utils/apiUtils';
 import { getDefaultChartRange, getCandleTypeLabel } from './utils/chartUtils';
 import { useRealTimeUpdate } from './hooks/useRealTimeUpdate';
+import { enhanceBacktestResult, createTradeHistory } from './utils/accountUtils';
+import { 
+  saveAccountBalance, 
+  loadAccountBalance, 
+  saveTradeHistory, 
+  loadTradeHistory,
+  saveSelectedMarket,
+  loadSelectedMarket
+} from './utils/storageUtils';
+import { isLicenseActive } from './utils/licenseUtils';
 
 function App() {
   const [markets, setMarkets] = useState([]);
-  const [selectedMarket, setSelectedMarket] = useState('KRW-BTC');
+  const [selectedMarket, setSelectedMarket] = useState(() => loadSelectedMarket());
   const [candleUnit, setCandleUnit] = useState('days');
   const [candleMinute, setCandleMinute] = useState('1');
   const [candleCount, setCandleCount] = useState(200);
@@ -29,6 +41,27 @@ function App() {
   const [error, setError] = useState(null);
   const [serverStatus, setServerStatus] = useState('checking');
   const [isRealTime, setIsRealTime] = useState(false);
+  
+  // 가상 계좌 상태 (로컬 스토리지에서 불러오기)
+  const [accountBalance, setAccountBalance] = useState(() => {
+    const saved = loadAccountBalance();
+    return saved || {
+      initial: 1000000, // 기본 100만원
+      current: 1000000
+    };
+  });
+  
+  const [tradeHistory, setTradeHistory] = useState(() => loadTradeHistory());
+  const [activeTrades, setActiveTrades] = useState(0);
+  
+  // 수익/손실 계산
+  const totalProfit = tradeHistory
+    .filter(t => t.profit > 0)
+    .reduce((sum, t) => sum + t.profit, 0);
+  
+  const totalLoss = Math.abs(tradeHistory
+    .filter(t => t.profit < 0)
+    .reduce((sum, t) => sum + t.profit, 0));
 
   // 서버 연결 확인
   useEffect(() => {
@@ -42,6 +75,21 @@ function App() {
     checkServer();
   }, []);
 
+  // 계좌 잔액 변경 시 저장
+  useEffect(() => {
+    saveAccountBalance(accountBalance);
+  }, [accountBalance]);
+
+  // 거래 내역 변경 시 저장
+  useEffect(() => {
+    saveTradeHistory(tradeHistory);
+  }, [tradeHistory]);
+
+  // 선택된 코인 변경 시 저장
+  useEffect(() => {
+    saveSelectedMarket(selectedMarket);
+  }, [selectedMarket]);
+
   // 실시간 업데이트 훅
   useRealTimeUpdate({
     isRealTime,
@@ -50,6 +98,7 @@ function App() {
     candleMinute,
     selectedMarket,
     candleCount,
+    candleData,
     setCandleData,
     setCurrentPrice
   });
@@ -94,10 +143,26 @@ function App() {
         fetchBacktest(candles, 10)
       ]);
       
+      // 금액 정보 추가
+      const enhancedResult5 = enhanceBacktestResult(backtest5, accountBalance);
+      const enhancedResult10 = enhanceBacktestResult(backtest10, accountBalance);
+      
       setBacktestResult({
-        result5: backtest5,
-        result10: backtest10
+        result5: enhancedResult5,
+        result10: enhancedResult10
       });
+
+      // 거래 내역 업데이트 (5% 결과 기준)
+      const history = createTradeHistory(backtest5, selectedMarket);
+      setTradeHistory(history);
+      
+      // 계좌 잔액 업데이트
+      if (enhancedResult5?.realAmount) {
+        setAccountBalance(prev => ({
+          ...prev,
+          current: prev.initial + enhancedResult5.realAmount.netProfit
+        }));
+      }
       
     } catch (err) {
       setError('분석 실패: ' + err.message);
@@ -128,8 +193,36 @@ function App() {
     }
   };
 
+  // 거래 내역 업데이트 핸들러
+  const handleTradeHistoryUpdate = (trade) => {
+    setTradeHistory(prev => [...prev, trade]);
+    // 계좌 잔액은 OrderSystem에서 직접 업데이트됨
+  };
+
+  // 공통 props 객체
+  const commonProps = {
+    markets,
+    selectedMarket,
+    onMarketChange: setSelectedMarket,
+    candleUnit,
+    onCandleUnitChange: handleCandleUnitChange,
+    candleMinute,
+    onCandleMinuteChange: setCandleMinute,
+    candleCount,
+    onAnalyze: runFullAnalysis,
+    loading,
+    serverStatus,
+    onRetryConnection: handleRetryConnection,
+    error,
+    currentPrice,
+    indicators,
+    candleData,
+    isRealTime,
+    onRealTimeToggle: () => setIsRealTime(!isRealTime)
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 relative overflow-hidden flex">
       {/* 배경 장식 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
@@ -137,57 +230,85 @@ function App() {
         <div className="absolute -bottom-8 left-1/3 w-96 h-96 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
       </div>
 
-      <div className="relative max-w-7xl mx-auto px-4 py-8">
-        {/* 헤더 */}
-        <Header serverStatus={serverStatus} onRetryConnection={handleRetryConnection} />
+      {/* 사이드바 */}
+      <Sidebar
+        accountBalance={accountBalance}
+        totalProfit={totalProfit}
+        totalLoss={totalLoss}
+        activeTrades={activeTrades}
+      />
 
-        {/* 서버 미연결 경고 */}
-        {serverStatus === 'disconnected' && (
-          <ServerWarning onRetry={handleRetryConnection} />
-        )}
-
-        {/* 코인 선택 */}
-        <CoinSelector
-          markets={markets}
-          selectedMarket={selectedMarket}
-          onMarketChange={setSelectedMarket}
-          candleUnit={candleUnit}
-          onCandleUnitChange={handleCandleUnitChange}
-          candleMinute={candleMinute}
-          onCandleMinuteChange={setCandleMinute}
-          candleCount={candleCount}
-          onAnalyze={runFullAnalysis}
-          loading={loading}
-          serverStatus={serverStatus}
-        />
-
-        {/* 에러 메시지 */}
-        {error && (
-          <div className="mb-6 bg-red-50/80 backdrop-blur-lg border border-red-200 rounded-xl p-4 flex items-center gap-3 shadow-lg">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-            <span className="text-red-700">{error}</span>
-          </div>
-        )}
-
-        {/* 현재가 정보 */}
-        <PriceCards currentPrice={currentPrice} />
-
-        {/* 기술적 지표 */}
-        <TechnicalIndicators indicators={indicators} />
-
-        {/* 가격 차트 */}
-        <PriceChart
-          candleData={candleData}
-          candleUnit={candleUnit}
-          candleMinute={candleMinute}
-          isRealTime={isRealTime}
-          onRealTimeToggle={() => setIsRealTime(!isRealTime)}
-          serverStatus={serverStatus}
-        />
-
-        {/* 백테스팅 결과 */}
-        <BacktestResults backtestResult={backtestResult} />
-      </div>
+      {/* 메인 컨텐츠 */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="relative max-w-7xl mx-auto px-4 py-8">
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/license" element={<LicensePage />} />
+            <Route 
+              path="/dashboard" 
+              element={<DashboardPage {...commonProps} />} 
+            />
+            <Route 
+              path="/trading" 
+              element={
+                <TradingPage
+                  {...commonProps}
+                  onCurrentPriceChange={setCurrentPrice}
+                  accountBalance={accountBalance}
+                  onBalanceChange={setAccountBalance}
+                  onTradeHistoryUpdate={handleTradeHistoryUpdate}
+                />
+              } 
+            />
+            <Route 
+              path="/backtest" 
+              element={
+                <BacktestPage
+                  candleData={candleData}
+                  accountBalance={accountBalance}
+                  selectedMarket={selectedMarket}
+                  backtestResult={backtestResult}
+                  onBacktestComplete={(result) => {
+                    const enhanced = enhanceBacktestResult(result, accountBalance);
+                    setBacktestResult({ custom: enhanced });
+                    const history = createTradeHistory(result, selectedMarket);
+                    setTradeHistory(history);
+                    if (enhanced?.realAmount) {
+                      setAccountBalance(prev => ({
+                        ...prev,
+                        current: prev.initial + enhanced.realAmount.netProfit
+                      }));
+                    }
+                  }}
+                />
+              } 
+            />
+            <Route 
+              path="/account" 
+              element={
+                <AccountPage
+                  accountBalance={accountBalance}
+                  onBalanceChange={setAccountBalance}
+                  tradeHistory={tradeHistory}
+                  onTradeHistoryUpdate={setTradeHistory}
+                />
+              } 
+            />
+            <Route 
+              path="/settings" 
+              element={
+                <SettingsPage
+                  accountBalance={accountBalance}
+                  onBalanceChange={setAccountBalance}
+                  serverStatus={serverStatus}
+                  tradeHistory={tradeHistory}
+                  onTradeHistoryUpdate={setTradeHistory}
+                />
+              } 
+            />
+          </Routes>
+        </div>
+      </main>
     </div>
   );
 }
