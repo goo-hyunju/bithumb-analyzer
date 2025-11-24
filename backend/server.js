@@ -60,8 +60,27 @@ app.get('/api/candles/:market', async (req, res) => {
   try {
     await delay(100);
     
-    const { count = 200 } = req.query;
-    const response = await axios.get(`${BITHUMB_API}/candles/days`, {
+    const { count = 200, unit = 'days', minute = null } = req.query;
+    
+    // 캔들 타입별 API 엔드포인트 결정
+    let endpoint;
+    if (unit === 'minutes') {
+      // 분봉: 1, 3, 5, 15, 30, 60분
+      const validMinutes = [1, 3, 5, 15, 30, 60];
+      const minuteValue = minute ? parseInt(minute) : 1;
+      if (!validMinutes.includes(minuteValue)) {
+        return res.status(400).json({ error: '지원하지 않는 분봉 단위입니다. (1, 3, 5, 15, 30, 60)' });
+      }
+      endpoint = `${BITHUMB_API}/candles/minutes/${minuteValue}`;
+    } else if (unit === 'days') {
+      endpoint = `${BITHUMB_API}/candles/days`;
+    } else if (unit === 'weeks') {
+      endpoint = `${BITHUMB_API}/candles/weeks`;
+    } else {
+      return res.status(400).json({ error: '지원하지 않는 캔들 타입입니다. (minutes, days, weeks)' });
+    }
+    
+    const response = await axios.get(endpoint, {
       params: {
         market: req.params.market,
         count: parseInt(count)
@@ -70,11 +89,11 @@ app.get('/api/candles/:market', async (req, res) => {
     
     // 시간순 정렬 (오래된 것부터)
     const sorted = response.data.reverse();
-    console.log(`✓ 캔들 데이터 조회: ${req.params.market} (${sorted.length}개)`);
+    console.log(`✓ 캔들 데이터 조회: ${req.params.market} (${unit}${unit === 'minutes' ? '/' + minute : ''}, ${sorted.length}개)`);
     res.json(sorted);
   } catch (error) {
     console.error('캔들 데이터 조회 실패:', error.message);
-    res.status(500).json({ error: '캔들 데이터 조회 실패' });
+    res.status(500).json({ error: '캔들 데이터 조회 실패: ' + error.message });
   }
 });
 
