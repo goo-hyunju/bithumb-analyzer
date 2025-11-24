@@ -589,12 +589,19 @@ CAPAS는 복잡한 암호화폐 투자를 **단순하고 실행 가능한 신호
 
 ### 전체 화면 구성
 ![전체 화면](./images\대시보드.png)
-(./images\대시보드.png)
-(./images\대시보드2.png)
-(./images\모의투자.png)
-(./images\설정.png)
-(./images\추가 매도도 모달.png)
-(./images\추가매수 모달달.png)
+
+<img width="1861" height="937" alt="대시보드" src="https://github.com/user-attachments/assets/ae6a12b6-0d86-4195-a1f5-896c44c1d69a" />
+<img width="1863" height="939" alt="대시보드2" src="https://github.com/user-attachments/assets/b584a78a-ee88-4521-ae3d-7628da4ee1ff" />
+
+<img width="1857" height="938" alt="모의투자" src="https://github.com/user-attachments/assets/b85142e3-ede2-47eb-8929-854afa966878" />
+
+<img width="1847" height="934" alt="설정" src="https://github.com/user-attachments/assets/80bdf900-2f6b-482a-94e2-78022a87602d" />
+<img width="1442" height="843" alt="내 계좌" src="https://github.com/user-attachments/assets/29aca18c-d900-43ec-9a0e-10e22d1dc650" />
+
+<img width="1847" height="940" alt="추가매수 모달" src="https://github.com/user-attachments/assets/65ae84ea-0a43-407d-b4c0-afa525173f38" />
+
+<img width="548" height="829" alt="추가 매도 모달" src="https://github.com/user-attachments/assets/38005f7b-dda5-4b97-ab62-5c7f4974f4e7" />
+
 
 
 
